@@ -145,6 +145,7 @@ file_type = {}
             self.properties['colormap'] = DEFAULT_MATRIX_COLORMAP
         self.cmap = cm.get_cmap(self.properties['colormap'])
         self.cmap.set_bad('white')
+        self.cmap.set_under('silver')
         self.background = True
 
 
@@ -331,7 +332,7 @@ file_type = {}
 
         # plot
         im = ax.pcolormesh(x, y, np.flipud(matrix_c),
-                           vmin=vmin, vmax=vmax, cmap=self.cmap, norm=self.norm, edgecolors='white',zorder=10)
+                           vmin=vmin, vmax=vmax, cmap=self.cmap, norm=self.norm, edgecolors='white')
 
         self.background = False
 
@@ -357,7 +358,8 @@ file_type = {}
                 col = [i for i, value in enumerate(indices_range) if value == cell]
                 if col:
                     cell_loc = row_start[0] + col[0]
-                    self.hic_ma.matrix.data[cell_loc] = 1
+                    # sets domain cell colors to base
+                    self.hic_ma.matrix.data[cell_loc] = 0.01
                     col = []
             row_start = row_start[1:]
             if len(row_start) == 1:
@@ -411,13 +413,11 @@ file_type = {}
         """
         shape = shape
         sparse_matrix = rand(shape,shape, density = 1, dtype=float)
-        # sets original cell color to base
-        sparse_matrix.data[:] = 1
         matrix = csr_matrix(sparse_matrix)
         cut_intervals = []
         binsize = binsize
         for x in range(sparse_matrix.shape[0]):
-            interval = ('X', binsize*x, binsize*(x+1), 20.0)
+            interval = ('X', binsize*x, binsize*(x+1), 1.0)
             cut_intervals.append(interval)
        
         return matrix, cut_intervals

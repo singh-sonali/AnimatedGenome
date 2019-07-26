@@ -322,8 +322,8 @@ def main(args=None):
     args = parse_arguments().parse_args(args)
     import random
     color_list = []
-    for x in range(203000,1000000,24000):
-        for y in range(203000,1000000,27000):
+    for x in range(303000,500000,100000):
+        for y in range(303000,500000,100000):
             color_list.append((x,y, random.randint(30,1000)))
     trp = EnginePlot(tracks_file=args.tracks.name, fig_width= args.width, fig_height=args.height, fontsize=args.fontSize, dpi=args.dpi, track_label_width=args.trackLabelFraction)
 
