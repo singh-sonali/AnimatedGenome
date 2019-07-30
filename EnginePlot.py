@@ -90,11 +90,8 @@ class EnginePlot(PlotTracks):
         # make sure that same frame is not being replotted
         if self.framecount[-1]!=self.framecount[-2]:
 
-            # empty out all fig axes except for first ax (hic domain background)
+            # empty out all fig axes
             if frame>0:
-                # for x in range((len(fig.axes)-1),1,-1):
-                #     extra_ax = fig.axes[x]
-                #     fig.delaxes(extra_ax)
                 plt.clf()
 
             if self.title:
@@ -322,9 +319,9 @@ def main(args=None):
     args = parse_arguments().parse_args(args)
     import random
     color_list = []
-    for x in range(303000,500000,100000):
-        for y in range(303000,500000,100000):
-            color_list.append((x,y, random.randint(30,1000)))
+    for x in range(203000,800000,20000):
+        for y in range(203000,800000,20000):
+            color_list.append((x,y, random.randint(2,1000)))
     trp = EnginePlot(tracks_file=args.tracks.name, fig_width= args.width, fig_height=args.height, fontsize=args.fontSize, dpi=args.dpi, track_label_width=args.trackLabelFraction)
 
     if args.BED:
