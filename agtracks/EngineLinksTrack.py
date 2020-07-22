@@ -34,6 +34,8 @@ file_type = {}
             self.properties['line style'] = 'solid'
         if 'links type' not in self.properties:
             self.properties['links type'] = 'arcs'
+        if 'links threshold' not in self.properties:
+            self.properties['links threshold'] = 0
         
         self.background = True
         self.max_height = None
@@ -51,10 +53,9 @@ file_type = {}
         :param ax: matplotlib axis
         :param label_ax: matplotlib axis for labels
         """
-
         if self.background == False:
             self.max_height = 0
-            for x in range(count+1):
+            for x in range(len(links_list)):
                 start, end, score = links_list[x]
                 if start == end:
                     start+=1
@@ -73,7 +74,7 @@ file_type = {}
 
             # the arc height is equal to the radius, the track height is the largest
             # radius plotted plus an small increase to avoid cropping of the arcs
-            self.max_height += self.max_height * 0.1
+            self.max_height += self.max_height*1.2
             if 'orientation' in self.properties and self.properties['orientation'] == 'inverted':
                 ax.set_ylim(self.max_height, -1)
             else:
@@ -104,7 +105,7 @@ file_type = {}
         x2 = x1 + float(end - start) / 2
         x3 = end
         y1 = 0
-        y2 = (end - start)
+        y2 = (end - start)/2
 
         triangle = Polygon(np.array([[x1, y1], [x2, y2], [x3, y1]]), closed=False,
                            facecolor='none', edgecolor=self.properties['color'],

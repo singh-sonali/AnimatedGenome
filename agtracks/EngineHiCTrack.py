@@ -65,16 +65,15 @@ file_type = {}
         # initialize matrix as HiCMatrix object with no data
         self.hic_ma = HiCMatrix.hiCMatrix(pMatrixFile=None, pChrnameList=region)
         # create matrix to fill out data and intervals 
-        if self.properties['matrix shape']:
-            shape = int(self.properties['matrix shape'])
-        else:
-            shape = 1000
-        if self.properties['binsize']:
-            binsize = int(self.properties['binsize'])
-        else:
-            binsize = 3000
+        if 'matrix shape' not in self.properties:
+            self.properties['matrix shape'] = 1000
+        if 'binsize' not in self.properties:
+            self.properties['binsize'] = 3000
+        if 'intervals start' not in self.properties:
+            self.properties['intervals start'] = 0
+            
         self.hic_ma.matrix, self.hic_ma.cut_intervals = \
-            self.definematrix(shape, binsize)
+            self.definematrix(self.properties['matrix shape'], self.properties['binsize'], self.properties['intervals start'], self.properties['chrom'])
 
         self.hic_ma.interval_trees, self.hic_ma.chrBinBoundaries = \
             self.hic_ma.intervalListToIntervalTree(self.hic_ma.cut_intervals)
@@ -145,7 +144,7 @@ file_type = {}
             self.properties['colormap'] = DEFAULT_MATRIX_COLORMAP
         self.cmap = cm.get_cmap(self.properties['colormap'])
         self.cmap.set_bad('white')
-        self.cmap.set_under('silver')
+        #self.cmap.set_over('blue')
         self.background = True
 
 
@@ -219,6 +218,9 @@ file_type = {}
                     matrix = np.log(matrix)
                 except ValueError:
                     self.log.info('All values are 0, no log applied.')
+
+            elif self.properties['transform'] == 'symlog':
+                self.norm = colors.SymLogNorm(linthresh=0.03,linscale=0.03)
 
         if 'max_value' in self.properties and self.properties['max_value'] != 'auto':
             vmax = self.properties['max_value']
@@ -332,7 +334,7 @@ file_type = {}
 
         # plot
         im = ax.pcolormesh(x, y, np.flipud(matrix_c),
-                           vmin=vmin, vmax=vmax, cmap=self.cmap, norm=self.norm, edgecolors='white')
+                           vmin=vmin, vmax=vmax, cmap=self.cmap, edgecolors='face', norm=self.norm)
 
         self.background = False
 
@@ -359,7 +361,7 @@ file_type = {}
                 if col:
                     cell_loc = row_start[0] + col[0]
                     # sets domain cell colors to base
-                    self.hic_ma.matrix.data[cell_loc] = 0.01
+                    self.hic_ma.matrix.data[cell_loc] = 0.5
                     col = []
             row_start = row_start[1:]
             if len(row_start) == 1:
@@ -375,26 +377,30 @@ file_type = {}
         if self.background == True or not color_list:
             first_bin,second_bin = -1, -1
         elif color_list and self.background == False:
-            coordinates = color_list[0]
-            loc1 = coordinates[0]
-            loc2 = coordinates[1]
-            if loc1>loc2:
-                loc1, loc2 = loc2, loc1
-            first_bin, second_bin = self.hic_ma.getRegionBinRange(chrname,loc1,loc2)
-            col = second_bin
-            row_start = self.hic_ma.matrix.indptr[first_bin]
-            row_end = self.hic_ma.matrix.indptr[first_bin + 1]
+            while color_list:
+                coordinates = color_list[0]
+                loc1 = coordinates[0]
+                loc2 = coordinates[1]
+                if loc1>loc2:
+                    loc1, loc2 = loc2, loc1
+                first_bin, second_bin = self.hic_ma.getRegionBinRange(chrname,loc1,loc2)
+                col = second_bin
+                row_start = self.hic_ma.matrix.indptr[first_bin]
+                row_end = self.hic_ma.matrix.indptr[first_bin + 1]
 
-            indices_range = self.hic_ma.matrix.indices[row_start:row_end]
-            res_list = [i for i, value in enumerate(indices_range) if value==col]
+                indices_range = self.hic_ma.matrix.indices[row_start:row_end]
+                res_list = [i for i, value in enumerate(indices_range) if value==col]
 
-            if res_list:
-                cell_loc = row_start + res_list[0]
-                if len(coordinates) == 3:
-                    # color is set based on interaction score
-                    self.hic_ma.matrix.data[cell_loc] = coordinates[2]
-                else: 
-                    self.hic_ma.matrix.data[cell_loc] = 1000
+                if res_list:
+                    cell_loc = row_start + res_list[0]
+                    if len(coordinates) == 3:
+                        # color is set based on interaction score
+                        self.hic_ma.matrix.data[cell_loc] += coordinates[2]
+                        # if len(color_list) == 1:
+                        #     self.hic_ma.matrix.data[cell_loc]= 10001
+                    else: 
+                        self.hic_ma.matrix.data[cell_loc] = 1000
+                color_list = color_list[1:]
         return first_bin, second_bin
 
 
@@ -406,18 +412,19 @@ file_type = {}
         text = ax.text(x+(binsize/2), y+(binsize/4), val, ha="center", va="center", color="white", fontsize = "12")
         return text
 
-    def definematrix(self, shape, binsize):
+    def definematrix(self, shape, binsize, intervals_start,chrom):
         """
         Creates modifiable Hi-C matrix based on given shape and binsize. End position of region plotted must be less than 
         shape*binsize.
         """
-        shape = shape
+        shape = int(shape)
         sparse_matrix = rand(shape,shape, density = 1, dtype=float)
         matrix = csr_matrix(sparse_matrix)
         cut_intervals = []
-        binsize = binsize
+        binsize = int(binsize)
+        intervals_start = int(intervals_start)
         for x in range(sparse_matrix.shape[0]):
-            interval = ('X', binsize*x, binsize*(x+1), 1.0)
+            interval = (chrom, binsize*x+intervals_start, binsize*(x+1)+intervals_start, 1.0)
             cut_intervals.append(interval)
        
         return matrix, cut_intervals

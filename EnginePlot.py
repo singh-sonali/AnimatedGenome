@@ -27,8 +27,7 @@ DEFAULT_BEDGRAPH_COLOR = '#a6cee3'
 DEFAULT_MATRIX_COLORMAP = 'Reds'
 DEFAULT_TRACK_HEIGHT = 3  # in centimeters
 # proportion of width dedicated to (figure, legends)
-DEFAULT_TRACK_HEIGHT = 0.5  # in centimeters
-DEFAULT_FIGURE_WIDTH = 40  # in centimeters
+DEFAULT_FIGURE_WIDTH = 60  # in centimeters
 # proportion of width dedicated to (figure, legends)
 DEFAULT_WIDTH_RATIOS = (0.01, 0.90, 0.1)
 DEFAULT_MARGINS = {'left': 0.04, 'right': 0.92, 'bottom': 0.03, 'top': 0.97}
@@ -47,7 +46,7 @@ log.setLevel(logging.DEBUG)
 
 
 class EnginePlot(PlotTracks):
-    def start(self, file_name, chrom, start, end, color_list, title=None):
+    def start(self, file_name, chrom, start, end, color_list, links_list, title=None):
         self.imgs = []
         # initializing variables needed for plotting
         self.track_height = self.get_tracks_height(start_region = start, end_region = end)
@@ -56,7 +55,7 @@ class EnginePlot(PlotTracks):
         self.end = end
         self.chrom = chrom
         self.color_list = color_list
-        self.links_list = color_list
+        self.links_list = links_list
         self.background = True
         self.framecount = [-1]
         if self.fig_height:
@@ -78,6 +77,62 @@ class EnginePlot(PlotTracks):
                     work.append(child)
         return avail_tracks
 
+    def get_tracks_height(self, start_region=None, end_region=None):
+        """
+        The main purpose of the following loop is
+        to get the height of each of the tracks
+        because for the Hi-C the height is variable with respect
+        to the range being plotted, the function is called
+        when each plot is going to be printed.
+
+        Args:
+            start_region: start of the region to plot. Only used in case the plot is a Hi-C matrix
+            end_region: end of the region to plot. Only used in case the plot is a Hi-C matrix
+
+        Returns:
+
+        """
+        track_height = []
+        for track_dict in self.track_list:
+            # if overlay previous is set to a value other than no
+            # then, skip this track height
+            if track_dict['overlay previous'] != 'no':
+                continue
+            elif 'x-axis' in track_dict and track_dict['x-axis'] is True:
+                height = track_dict['fontsize'] / 10
+            elif 'height' in track_dict:
+                height = track_dict['height']
+            # compute the height of a Hi-C track
+            # based on the depth such that the
+            # resulting plot appears proportional
+            #
+            #      /|\
+            #     / | \
+            #    /  |d \   d is the depth that we want to be proportional
+            #   /   |   \  when plotted in the figure
+            # ------------------
+            #   region len
+            #
+            # d (in cm) =  depth (in bp) * width (in cm) / region len (in bp)
+
+            elif 'depth' in track_dict and (track_dict['file_type'] == 'hic_matrix' or track_dict['file_type'] == 'engine_hic_matrix') :
+                # to compute the actual width of the figure the margins and the region
+                # set for the legends have to be considered
+                # DEFAULT_MARGINS[1] - DEFAULT_MARGINS[0] is the proportion of plotting area
+
+                hic_width = \
+                    self.fig_width * (DEFAULT_MARGINS['right'] - DEFAULT_MARGINS['left']) * self.width_ratios[1]
+                scale_factor = 0.6  # the scale factor is to obtain a 'pleasing' result.
+                depth = min(track_dict['depth'], (end_region - start_region))
+
+                height = scale_factor * depth * hic_width / (end_region - start_region)
+            else:
+                height = DEFAULT_TRACK_HEIGHT
+
+            track_height.append(height)
+
+        return track_height
+
     def plot(self, frame):
         """function for plotting each frame of animation 
            as updated tracks are drawn"""
@@ -89,6 +144,7 @@ class EnginePlot(PlotTracks):
         
         # make sure that same frame is not being replotted
         if self.framecount[-1]!=self.framecount[-2]:
+            log.info(frame)
 
             # empty out all fig axes
             if frame>0:
@@ -163,18 +219,14 @@ class EnginePlot(PlotTracks):
                                 top=DEFAULT_MARGINS['top'])
 
             # if not drawing first frame of animation, reduce size of updating list
-            if self.background == False:
-                self.color_list = self.color_list[1:]
+            # if self.background == False:
+            #     self.color_list = self.color_list[1:]
             self.background = False
             
 
         # returns updated figure to be used in function-based animation. if using artist animation, must return a list of iterables in the form of images (convert figure to image) to generate animation.
+        fig.savefig('output.png', dpi=self.dpi)
         return fig,
-
-        # save final figure (last frame of animation)
-        # fig.savefig(file_name, dpi=self.dpi, transparent=False)
-        # return fig.get_size_inches()
-
 
     def artist_animation(self, imgs, interval = 300.0, dpi = 72, save_gif = True, saveto='testanimation.gif', show_gif = False):
         """builds animation from list of pre-plotted images. 
@@ -200,9 +252,9 @@ class EnginePlot(PlotTracks):
            optimal with large frame counts."""
         Writer = animation.writers['ffmpeg']
         writer = Writer(fps=10, metadata=dict(artist='Me'), bitrate=1800)
-        anim = animation.FuncAnimation(fig=fig, func=self.plot, frames=len(self.color_list)+1, interval = 1.0, blit = True)
+        anim = animation.FuncAnimation(fig=fig, func=self.plot, frames=2, interval = 1.0, blit = True)
         anim.save('diffhicanimation.mp4', writer=writer,dpi=72)
-        # fig.savefig('first.png', dpi=self.dpi)
+        
         
 
 
@@ -220,6 +272,8 @@ def parse_arguments(args=None):
                         type=argparse.FileType('r'),
                         required=True,
                         )
+    parser.add_argument('--data', help='Text file containing Hi-C contacts (try using Juicebox straw to generate these).', type=argparse.FileType('r'),required=True)
+    parser.add_argument('--loops', help='Bed file containing the locations of loops discovered.', type=argparse.FileType('r'),required=True)
 
     group = parser.add_mutually_exclusive_group(required=True)
 
@@ -319,9 +373,24 @@ def main(args=None):
     args = parse_arguments().parse_args(args)
     import random
     color_list = []
-    for x in range(203000,800000,20000):
-        for y in range(203000,800000,20000):
-            color_list.append((x,y, random.randint(2,1000)))
+    links_list = []
+    file = open(args.data.name,'r')
+    data = file.readlines()
+
+    for line in data:
+        start = (line.strip().split('\t')[0])
+        end = (line.strip().split('\t')[1])
+        score = (line.strip().split('\t')[2])
+        color_list.append((int(start),int(end),float(score)))
+
+    links = open(args.loops.name,'r')
+    ldata = links.readlines()
+    for line in ldata:
+        start = (line.strip().split('\t')[1])
+        end = (line.strip().split('\t')[2])
+        score = (line.strip().split('\t')[4])
+        links_list.append((int(start),int(end),float(score)))
+
     trp = EnginePlot(tracks_file=args.tracks.name, fig_width= args.width, fig_height=args.height, fontsize=args.fontSize, dpi=args.dpi, track_label_width=args.trackLabelFraction)
 
     if args.BED:
@@ -354,7 +423,7 @@ def main(args=None):
 
     else:
         region = get_region(args.region)
-        trp.start(args.outFileName, *region, color_list, title=args.title)
+        trp.start(args.outFileName, *region, color_list, links_list, title=args.title)
 
 
 
@@ -362,7 +431,6 @@ if __name__ == "__main__":
     args = None
     # initialize figure used for plotting
     fig = plt.figure(figsize=(40.0,24.0))
-    #initialize number of axes in background
     if len(sys.argv) == 1:
         args = ["--help"]
     main(args)
